@@ -51,34 +51,45 @@ class KEM(ABC):
 
 
 class KyberPyKEM(KEM):
-    """Pure-Python ML-KEM via the ``kyber-py`` package (default backend)."""
+    """Pure-Python ML-KEM via the ``kyber-py`` package (default backend).
+
+    The tuple ordering of ``keygen``/``encaps`` has shifted across kyber-py
+    versions, so we disambiguate by length rather than position: the ML-KEM
+    shared secret is always 32 bytes, while ciphertexts and keys are far larger.
+    """
 
     name = "kyber-py"
 
     def __init__(self, algorithm: str = "ML-KEM-768") -> None:
         try:
-            from kyber_py import ml_kem  # type: ignore
+            from kyber_py.ml_kem import ML_KEM_512, ML_KEM_768, ML_KEM_1024  # type: ignore
         except Exception as exc:  # pragma: no cover - import guard
             raise ImportError(
                 "kyber-py is required for the default KEM backend. "
                 "Install it with `pip install kyber-py` (it is in requirements.txt)."
             ) from exc
-        if algorithm not in _ALIASES:
+        impls = {"ML-KEM-512": ML_KEM_512, "ML-KEM-768": ML_KEM_768, "ML-KEM-1024": ML_KEM_1024}
+        if algorithm not in impls:
             raise ValueError(f"unsupported KEM algorithm: {algorithm}")
-        attr = _ALIASES[algorithm]["kyber-py"]
         self.algorithm = algorithm
-        self._impl = getattr(ml_kem, attr)
+        self._impl = impls[algorithm]
 
     def keypair(self) -> tuple[bytes, bytes]:
-        ek, dk = self._impl.keygen()  # (encaps key, decaps key)
-        return bytes(ek), bytes(dk)
+        a, b = (bytes(x) for x in self._impl.keygen())
+        # encapsulation (public) key is shorter than the decapsulation (secret) key
+        return (a, b) if len(a) < len(b) else (b, a)
 
     def encapsulate(self, public_key: bytes) -> tuple[bytes, bytes]:
-        shared, ct = self._impl.encaps(public_key)  # kyber-py returns (key, ct)
-        return bytes(ct), bytes(shared)
+        a, b = (bytes(x) for x in self._impl.encaps(public_key))
+        ss, ct = (a, b) if len(a) == 32 else (b, a)  # shared secret is 32 bytes
+        return ct, ss
 
     def decapsulate(self, secret_key: bytes, ciphertext: bytes) -> bytes:
-        return bytes(self._impl.decaps(secret_key, ciphertext))
+        try:
+            return bytes(self._impl.decaps(secret_key, ciphertext))
+        except (TypeError, ValueError):
+            # tolerate (ciphertext, dk) arg order in some kyber-py versions
+            return bytes(self._impl.decaps(ciphertext, secret_key))
 
 
 class LibOQSKEM(KEM):
