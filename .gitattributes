@@ -1,0 +1,6 @@
+# Target box is Linux; keep LF endings in the repo for shell/Makefile/python.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pt binary
+*.npz binary
