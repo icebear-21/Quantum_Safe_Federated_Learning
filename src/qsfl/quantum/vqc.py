@@ -75,7 +75,7 @@ class VQCKeyGenerator:
                     qml.CNOT(wires=[q, q + 1])
                 if self.n_qubits > 1:
                     qml.CNOT(wires=[self.n_qubits - 1, 0])  # ring entanglement
-            return qml.probs(wires=range(self.n_qubits))
+            return qml.probs(wires=list(range(self.n_qubits)))
 
         return np.asarray(circuit(self.theta), dtype=np.float64)
 
