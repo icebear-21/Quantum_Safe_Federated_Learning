@@ -1,0 +1,50 @@
+# =============================================================================
+# Smoke config: tiny end-to-end run for `make test`.
+# CPU-only, pure-Python KEM (no native build), no GPU, finishes in minutes.
+# Exercises EVERY layer of the pipeline on a minimal scale.
+# =============================================================================
+run_name: smoke
+mode: federated
+
+seed: 0
+device: cpu
+deterministic: true
+num_workers: 0
+
+data:
+  subsets: [pneumoniamnist, bloodmnist]   # 2 tiny hospitals
+  partition: noniid
+  dirichlet_alpha: 0.5
+  max_train_per_client: 256
+  max_test: 256
+
+federated:
+  num_clients: 2
+  rounds: 1
+  local_epochs: 1
+  batch_size: 64
+  lr: 0.05
+
+aggregation:
+  mode: authorized_decrypt
+  kem:
+    backend: kyber-py            # never depend on a native build in the smoke test
+
+quantum:
+  n_qubits: 4
+  n_layers: 2
+  key_bits: 256                  # keep the real 256-bit key; only the circuit shrinks
+
+model:
+  backbone: resnet
+  resnet:
+    variant: tiny_cnn            # smallest backbone (see models/registry)
+
+watermark:
+  secondary:
+    length: 64                   # shorter invisible payload for speed
+
+attacks:
+  enabled: [fine_tuning, pruning]   # quick robustness checks only
+  fine_tuning: {epochs: 1, lr: 1.0e-3}
+  pruning: {amounts: [0.2, 0.5]}

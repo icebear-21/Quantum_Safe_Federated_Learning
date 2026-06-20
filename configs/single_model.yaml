@@ -1,0 +1,31 @@
+# =============================================================================
+# Diagram A: single-model protection (N=1, no federated aggregation).
+# The protection pipeline (VQC key -> hybrid encrypt -> dual watermark ->
+# ledger -> verify -> deploy) is identical to the federated path; only the
+# "many hospitals + aggregation" stage collapses to one trainer.
+# =============================================================================
+run_name: single_model
+mode: single_model
+
+data:
+  subsets: [pathmnist]          # one dataset, one trained model
+  partition: iid
+
+federated:
+  num_clients: 1
+  rounds: 1
+  local_epochs: 10              # train the single model properly
+  batch_size: 256
+  lr: 0.01
+
+aggregation:
+  mode: authorized_decrypt      # trivial with one client; still encrypts the update
+
+model:
+  backbone: resnet
+  resnet:
+    variant: resnet18
+
+quantum:
+  n_qubits: 8
+  n_layers: 3

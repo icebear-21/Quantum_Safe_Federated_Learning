@@ -1,0 +1,138 @@
+# =============================================================================
+# QSFL default configuration. Named configs (smoke / single_model / federated)
+# are merged ON TOP of this file, then CLI dotlist overrides on top of that:
+#     python scripts/run_pipeline.py --config configs/federated.yaml \
+#            federated.rounds=20 quantum.n_qubits=10
+# Nothing in the codebase hard-codes a path or magic number; change it here.
+# =============================================================================
+
+run_name: qsfl
+mode: federated                 # federated | single_model
+
+# --- reproducibility / hardware (target: 6 cores, 1x H100 80GB) ---
+seed: 1337
+device: auto                    # auto | cpu | cuda
+deterministic: true             # set torch deterministic flags (see utils.seeding)
+num_workers: 4                  # capped for the 6-core box
+output_dir: results
+checkpoint_dir: checkpoints
+log_level: INFO
+
+# --- Layer 1: Medical data & clients ---
+data:
+  name: medmnist
+  # One subset per hospital -> heterogeneous modalities (MRI/CT/X-ray/pathology-like).
+  subsets: [pathmnist, octmnist, pneumoniamnist, bloodmnist]
+  root: data
+  image_size: 28
+  as_rgb: true                  # unify channels across subsets
+  download: true
+  partition: noniid             # iid | noniid (Dirichlet)
+  dirichlet_alpha: 0.5          # lower = more non-IID
+  max_train_per_client: null    # cap samples for quick runs (null = all)
+  max_test: null
+
+# --- Local training (per client) ---
+federated:
+  num_clients: 4
+  rounds: 10
+  local_epochs: 1
+  client_fraction: 1.0          # fraction of clients sampled per round
+  batch_size: 128               # H100 has headroom; tune freely
+  lr: 0.01
+  optimizer: sgd                # sgd | adam
+  momentum: 0.9
+  weight_decay: 5.0e-4
+  update_type: delta            # delta (W_local - W_global) | gradients
+
+# --- Layer 3: Secure aggregation ---
+aggregation:
+  mode: authorized_decrypt      # authorized_decrypt (sim) | masked (Bonawitz-style)
+  kem:
+    backend: kyber-py           # kyber-py (pure Python, default) | liboqs (native, reported)
+    algorithm: ML-KEM-768       # liboqs name; kyber-py maps this to Kyber768/ML-KEM-768
+  masked:
+    dropout_tolerance: 0.0      # fraction of clients allowed to drop and still recover sum
+    mask_seed: 4242
+
+# --- Layer 2: Quantum-safe key generation (VQC) ---
+quantum:
+  enabled: true
+  n_qubits: 8
+  n_layers: 3                   # R_Y rotation layers + CNOT entanglers
+  backend: default.qubit        # default.qubit (CPU) | lightning.qubit | lightning.gpu
+  key_bits: 256                 # K_q in {0,1}^256
+  theta_seed: 7                 # circuit params are deterministic given (theta_seed)
+  shots: null                   # null = analytic statevector sampling
+
+# --- Crypto (hybrid KDF + AEAD) ---
+crypto:
+  kdf: hkdf-sha256              # IKM = kyber_shared_secret || K_q
+  cipher: aes-256-gcm
+  hkdf_info: "qsfl/data-key/v1"
+
+# --- Models ---
+model:
+  backbone: resnet              # resnet | vit
+  num_classes: null             # inferred from dataset if null
+  resnet:
+    variant: resnet18
+    pretrained: false
+  vit:
+    patch_size: 4
+    dim: 192
+    depth: 6
+    heads: 3
+    mlp_dim: 384
+
+# --- Layer 4: Dual watermarking (Uchida-style white-box) ---
+watermark:
+  enabled: true
+  primary:                      # WM_1: visible image P (QR/logo)
+    type: qr                    # qr | image
+    payload: "QSFL-OWNER-2026"
+    image_path: null            # used when type=image
+    target_layer: auto          # auto picks a large conv/linear weight
+    strength: 0.01
+    key_seed: 101               # secret projection seed (keep private)
+  secondary:                    # WM_2: invisible bit-sequence S
+    type: bits
+    length: 256
+    payload_seed: 202
+    target_layer: auto
+    strength: 0.005
+    key_seed: 303
+
+# --- Layer 6: Ledger / ownership ---
+ledger:
+  backend: hashchain            # hashchain (default) | web3 (optional)
+  path: ledger_chain/chain.jsonl
+  web3:
+    rpc_url: http://127.0.0.1:8545
+    chain_id: 31337
+    contract_path: src/qsfl/ledger/contracts/OwnershipRegistry.sol
+    account_index: 0
+
+# --- Verification thresholds ---
+verification:
+  tau1: 0.90                    # NC(P, P')  must exceed
+  tau2: 0.90                    # NC(S, S')  must exceed
+  tau3: 0.10                    # BER(S, S') must be below
+
+# --- Layer 5: Attack evaluation ---
+attacks:
+  enabled:
+    - fine_tuning
+    - pruning
+    - watermark_removal
+    - model_extraction
+    - membership_inference
+    - gradient_leakage
+    - poisoning
+  fine_tuning:   {epochs: 5, lr: 1.0e-3}
+  pruning:       {amounts: [0.2, 0.5, 0.8]}
+  watermark_removal: {method: overwrite, strength: 0.02}
+  model_extraction:  {queries: 2000, student: resnet, epochs: 5}
+  membership_inference: {attack: threshold}
+  gradient_leakage:  {iters: 100, lr: 0.1, target_batch: 1}
+  poisoning:     {fraction: 0.2, type: label_flip}

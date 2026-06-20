@@ -1,0 +1,48 @@
+# =============================================================================
+# RECOMMENDED path for the liboqs-backed "reported results" environment.
+#
+# conda-forge supplies liboqs + cmake + a compiler toolchain cleanly, which
+# sidesteps the most painful part of building the native PQC backend. Use this
+# when you want the liboqs-python KEM (aggregation.kem.backend=liboqs); the
+# pip-only path (requirements.txt) uses the pure-Python kyber-py fallback and is
+# fine for development + the smoke test.
+#
+#   conda env create -f environment.yml
+#   conda activate qsfl
+#   make setup-gpu        # install CUDA torch wheels (H100 / cu124)
+#   pip install liboqs-python==0.10.0   # builds against the conda liboqs
+#
+# See README "liboqs backend (reported results)".
+# =============================================================================
+name: qsfl
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  # native PQC stack (this is the whole point of using conda here)
+  - liboqs=0.10.0
+  - cmake
+  - ninja
+  - compilers
+  # scientific core via conda for clean ABIs
+  - numpy=2.1.3
+  - scipy=1.14.1
+  - matplotlib=3.9.2
+  - scikit-learn=1.5.2
+  - pip:
+      # everything not needed as a native conda package goes through pip.
+      # torch/torchvision are installed via `make setup-gpu` (CUDA index URL),
+      # NOT here, so the wheel selection stays explicit.
+      - pyyaml==6.0.2
+      - omegaconf==2.3.0
+      - medmnist==3.0.2
+      - tqdm==4.67.1
+      - pennylane==0.39.0
+      - kyber-py==1.0.1
+      - cryptography==44.0.0
+      - pillow==11.0.0
+      - qrcode==8.0
+      - liboqs-python==0.10.0
+      - pytest==8.3.4
+      - pytest-cov==6.0.0

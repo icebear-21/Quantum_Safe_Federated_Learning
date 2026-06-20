@@ -1,0 +1,50 @@
+# =============================================================================
+# Direct (top-level) dependencies. This is the SOURCE of truth.
+# Generate the pinned lock with:   make lock
+#   (uv pip compile requirements.in -o requirements.txt   OR   pip-compile)
+#
+# Reproducibility note: requirements.txt is the COMPILED, fully-pinned lockfile
+# (incl. transitive deps + hashes where available). Always install from it, not
+# from this file. See README "Reproducible installs".
+#
+# torch/torchvision are deliberately NOT pinned with a CUDA build here because
+# the wheel must come from the CUDA index URL. See README + `make setup-gpu`.
+# The default `make setup` installs the CPU torch wheel so the smoke test runs
+# anywhere; `make setup-gpu` swaps in the H100 (cu124) wheels.
+# =============================================================================
+
+# --- core / config ---
+numpy>=1.26,<2.2
+scipy>=1.11,<1.15
+pyyaml>=6.0
+omegaconf>=2.3
+
+# --- deep learning ---
+# torch and torchvision are installed separately (CUDA index). Pinned in README.
+torch>=2.4,<2.7
+torchvision>=0.19,<0.22
+medmnist>=3.0
+scikit-learn>=1.4
+tqdm>=4.66
+
+# --- quantum (simulated VQC) ---
+pennylane>=0.36
+
+# --- post-quantum crypto ---
+# liboqs-python is the PRIMARY backend but is installed out-of-band (conda-forge
+# or native build) — see environment.yml / README. kyber-py is the pure-Python
+# fallback used by the smoke test (no native build required).
+kyber-py>=1.0
+
+# --- symmetric crypto / KDF ---
+cryptography>=42.0
+
+# --- watermarking ---
+pillow>=10.0
+qrcode>=7.4
+
+# --- reporting / plots ---
+matplotlib>=3.8
+
+# --- optional: real-chain ledger backend (kept out of default path) ---
+# web3>=6.15        # uncomment + re-lock if using ledger.backend=web3

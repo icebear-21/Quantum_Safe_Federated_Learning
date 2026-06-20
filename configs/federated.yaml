@@ -1,0 +1,40 @@
+# =============================================================================
+# Diagram B: full quantum-safe federated run across heterogeneous hospitals.
+# Tuned for the H100 box. Override on the CLI for sweeps, e.g.:
+#     ... --config configs/federated.yaml aggregation.mode=masked model.backbone=vit
+# =============================================================================
+run_name: federated
+mode: federated
+
+device: auto
+
+data:
+  subsets: [pathmnist, octmnist, pneumoniamnist, bloodmnist]   # 4 hospitals
+  partition: noniid
+  dirichlet_alpha: 0.5
+
+federated:
+  num_clients: 4
+  rounds: 20
+  local_epochs: 2
+  client_fraction: 1.0
+  batch_size: 256
+  lr: 0.01
+
+aggregation:
+  mode: authorized_decrypt      # set to 'masked' for the privacy-preservation results
+  kem:
+    backend: kyber-py           # set to 'liboqs' for the reported PQC results
+
+model:
+  backbone: resnet
+  resnet:
+    variant: resnet18
+
+quantum:
+  n_qubits: 8
+  n_layers: 3
+  backend: default.qubit        # set to lightning.gpu on the H100 for speed
+
+ledger:
+  backend: hashchain            # set to 'web3' to register on a local dev chain

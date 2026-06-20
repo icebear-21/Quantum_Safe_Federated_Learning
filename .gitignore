@@ -1,0 +1,46 @@
+# Datasets, checkpoints, results (regenerated; keep repo lean for the 100GB target box)
+data/
+results/
+checkpoints/
+*.pt
+*.ckpt
+*.npz
+*.npy
+!tests/**/fixtures/**
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual envs
+.venv/
+venv/
+env/
+.conda/
+
+# Quantum / crypto local material that must never be committed
+secrets/
+*.key
+*.pem
+embedding_keys/
+
+# Blockchain (optional web3 backend) local state
+ledger_chain/
+artifacts/
+cache/
+node_modules/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

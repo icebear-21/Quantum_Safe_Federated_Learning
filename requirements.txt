@@ -1,0 +1,42 @@
+# =============================================================================
+# COMPILED LOCKFILE (pinned baseline).
+#
+# This is the file you install from for reproducible runs:
+#     pip install -r requirements.txt          (or: uv pip install -r requirements.txt)
+#
+# It was authored as a known-good pinned baseline. Because the exact resolved
+# transitive set depends on your platform/Python, REGENERATE it on your target
+# box for a true platform-locked file:
+#     make lock        # -> uv pip compile requirements.in -o requirements.txt
+#
+# torch / torchvision are pinned here to CPU-compatible versions so the smoke
+# test runs anywhere. For the H100, install the CUDA build instead:
+#     make setup-gpu   # pip install torch==2.6.0 ... --index-url .../cu124
+# (see README "GPU / H100 install"). Do NOT mix a CPU torch wheel into the
+# reported-results environment.
+# =============================================================================
+
+numpy==2.1.3
+scipy==1.14.1
+pyyaml==6.0.2
+omegaconf==2.3.0
+
+torch==2.6.0
+torchvision==0.21.0
+medmnist==3.0.2
+scikit-learn==1.5.2
+tqdm==4.67.1
+
+pennylane==0.39.0
+
+kyber-py==1.0.1
+cryptography==44.0.0
+
+pillow==11.0.0
+qrcode==8.0
+
+matplotlib==3.9.2
+
+# dev / test (kept here so `make test` works from one file; split out if desired)
+pytest==8.3.4
+pytest-cov==6.0.0

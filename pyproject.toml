@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qsfl"
+version = "0.1.0"
+description = "Quantum-Safe Federated Learning Framework for Secure Medical Image Sharing and Deep Learning Model Protection"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "QSFL authors" }]
+keywords = ["federated-learning", "post-quantum", "kyber", "watermarking", "medical-imaging", "quantum"]
+
+# NOTE: runtime dependencies are managed via requirements.in -> requirements.txt
+# (compiled/pinned lockfile). This list is intentionally loose and exists so the
+# package is installable; use `make setup` / `make lock` for reproducible installs.
+dependencies = [
+  "numpy",
+  "pyyaml",
+  "omegaconf",
+  "cryptography",
+]
+
+[project.optional-dependencies]
+# Heavy / target-machine deps. Kept optional so `pip install -e .` stays light;
+# the reproducible install path is requirements.txt (see README).
+ml = ["torch", "torchvision", "medmnist", "scikit-learn", "pillow", "qrcode", "tqdm", "matplotlib"]
+quantum = ["pennylane"]
+pqc = ["kyber-py"]          # pure-Python ML-KEM fallback (no native build)
+ledger = ["web3"]          # optional real-chain backend
+dev = ["pytest", "pytest-cov", "ruff", "pip-tools"]
+
+[project.scripts]
+qsfl = "qsfl.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "liboqs: requires the native liboqs-python backend to be installed",
+  "gpu: requires a CUDA GPU",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["E501"]
