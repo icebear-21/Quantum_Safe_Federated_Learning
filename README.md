@@ -153,6 +153,27 @@ Results (metrics JSON + plots) are written under `results/` (git-ignored).
 
 ---
 
+## Testing
+
+```bash
+make test        # unit tests (CPU, no native build) + a tiny end-to-end run
+```
+
+The pytest suite includes a **hermetic end-to-end test** on synthetic data
+(`data.name=synthetic`, no network/GPU) plus crypto round-trip, watermark
+embed→extract, NC/BER, secure-aggregation mask cancellation, ledger immutability,
+and an attack-suite smoke test. The gated liboqs test runs only when the native
+backend is installed (`pytest -m liboqs`).
+
+## Outputs
+
+Each run writes to `results/<run_name>/`:
+
+- `config.yaml` — the fully-resolved config (reproducibility).
+- `results.json` — accuracies, `H = SHA256(C)`, ownership proof, verification verdict.
+- `encrypted_model.json` — the encrypted protected model `C`.
+- `attacks.json` + `pruning_robustness.png`, `attack_summary.png` (from `make eval`).
+
 ## Architecture
 
 Six layers (see `src/qsfl/`):

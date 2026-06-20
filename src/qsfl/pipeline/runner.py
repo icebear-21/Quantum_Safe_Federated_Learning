@@ -13,7 +13,9 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -25,11 +27,26 @@ from qsfl.models import build_model
 from qsfl.quantum import generate_quantum_key
 from qsfl.utils.config import save_config
 from qsfl.utils.logging import get_logger
+from qsfl.utils.seeding import set_seed
 from qsfl.utils.tensor_io import pack_state, unpack_state
 from qsfl.verification import verify_ownership
 from qsfl.watermark import DualWatermarker
 
 logger = get_logger("pipeline")
+
+
+@dataclass
+class ProtectedArtifacts:
+    """In-memory objects produced by training + protection (for pipeline/attacks)."""
+
+    model: Any
+    bundle: Any
+    data: Any
+    encryptor: HybridEncryptor
+    quantum_key: bytes
+    history: list
+    accuracy_clean: float
+    accuracy_watermarked: float
 
 
 def _watermark_commitment(bundle) -> str:
@@ -41,34 +58,23 @@ def _watermark_commitment(bundle) -> str:
     ).hexdigest()
 
 
-def run_pipeline(cfg) -> dict:
-    """Execute the pipeline and return (also save) a results dict."""
-    from qsfl.utils.seeding import set_seed
+def train_and_protect(cfg) -> ProtectedArtifacts:
+    """Layers 1-4: quantum key -> federated secure-agg -> dual watermark.
 
+    Returns the live objects (model, watermark bundle, encryptor, data) so both
+    the full pipeline and the attack-evaluation harness can build on them.
+    """
     set_seed(int(cfg.seed), deterministic=bool(cfg.deterministic))
-    out_dir = Path(cfg.output_dir) / str(cfg.run_name)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    save_config(cfg, out_dir / "config.yaml")
-    t0 = time.time()
-    results: dict = {"run_name": str(cfg.run_name), "mode": str(cfg.mode), "device": str(cfg.device)}
 
-    # --- Layer 2: quantum key K_q ---
     if bool(cfg.quantum.enabled):
         kq = generate_quantum_key(cfg.quantum)
         logger.info("VQC key K_q generated (%d bits, backend=%s)", cfg.quantum.key_bits, cfg.quantum.backend)
     else:
         import os
 
-        kq = os.urandom(cfg.quantum.key_bits // 8)
-    results["quantum_key_bits"] = int(cfg.quantum.key_bits)
+        kq = os.urandom(int(cfg.quantum.key_bits) // 8)
 
-    # --- Layer 1: data + clients ---
     data = build_federated_data(cfg)
-    results["num_clients"] = data.num_clients
-    results["num_classes"] = data.num_classes
-    results["client_names"] = data.client_names
-
-    # --- Layer 2/3: hybrid encryptor + federated secure aggregation ---
     encryptor = HybridEncryptor(
         quantum_key=kq,
         backend=str(cfg.aggregation.kem.backend),
@@ -77,31 +83,61 @@ def run_pipeline(cfg) -> dict:
     server = FederatedServer(cfg, data, encryptor)
     fed = server.run()
     model = fed["model"]
-    results["training_history"] = fed["history"]
     acc_clean = evaluate(model, data.test_set, cfg.device)
-    results["accuracy_global"] = acc_clean
     logger.info("global model accuracy (pre-watermark) = %.4f", acc_clean)
 
-    # --- Layer 4: dual watermarking ---
     bundle = None
+    acc_wm = acc_clean
     if bool(cfg.watermark.enabled):
         bundle = DualWatermarker(cfg).embed(model)
         acc_wm = evaluate(model, data.test_set, cfg.device)
-        results["accuracy_watermarked"] = acc_wm
-        results["accuracy_drop_watermark"] = acc_clean - acc_wm
         logger.info("accuracy after watermark = %.4f (drop %.4f)", acc_wm, acc_clean - acc_wm)
 
+    return ProtectedArtifacts(
+        model=model,
+        bundle=bundle,
+        data=data,
+        encryptor=encryptor,
+        quantum_key=kq,
+        history=fed["history"],
+        accuracy_clean=acc_clean,
+        accuracy_watermarked=acc_wm,
+    )
+
+
+def run_pipeline(cfg) -> dict:
+    """Execute the full pipeline (incl. encrypt/register/verify/deploy) + save results."""
+    out_dir = Path(cfg.output_dir) / str(cfg.run_name)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    save_config(cfg, out_dir / "config.yaml")
+    t0 = time.time()
+
+    art = train_and_protect(cfg)
+    results: dict = {
+        "run_name": str(cfg.run_name),
+        "mode": str(cfg.mode),
+        "device": str(cfg.device),
+        "quantum_key_bits": int(cfg.quantum.key_bits),
+        "num_clients": art.data.num_clients,
+        "num_classes": art.data.num_classes,
+        "client_names": art.data.client_names,
+        "training_history": art.history,
+        "accuracy_global": art.accuracy_clean,
+    }
+    if art.bundle is not None:
+        results["accuracy_watermarked"] = art.accuracy_watermarked
+        results["accuracy_drop_watermark"] = art.accuracy_clean - art.accuracy_watermarked
+
     # --- encrypt final protected model: C, H = SHA256(C) ---
-    w_s = state_to_numpy(model)
-    payload = pack_state(w_s)
-    enc_model = encryptor.encrypt(payload, aad=b"final-model", label="W_S")
+    w_s = state_to_numpy(art.model)
+    enc_model = art.encryptor.encrypt(pack_state(w_s), aad=b"final-model", label="W_S")
     model_hash = enc_model.ciphertext_hash()
     results["model_hash_H"] = model_hash
     (out_dir / "encrypted_model.json").write_text(json.dumps(enc_model.to_dict()))
 
     # --- Layer 6: ownership registration ---
     ledger = get_ledger(cfg)
-    commitment = _watermark_commitment(bundle) if bundle else ""
+    commitment = _watermark_commitment(art.bundle) if art.bundle else ""
     proof = ledger.register(
         OwnershipRecord(model_hash=model_hash, owner=str(cfg.run_name), watermark_commitment=commitment)
     )
@@ -109,15 +145,14 @@ def run_pipeline(cfg) -> dict:
     logger.info("registered H on ledger (%s): %s", cfg.ledger.backend, proof)
 
     # --- Deployment: authorized user retrieves C, decrypts, verifies, deploys ---
-    recovered = unpack_state(encryptor.decrypt(enc_model))
-    deployed = build_model(cfg, data.num_classes, data.in_channels, data.image_size)
+    recovered = unpack_state(art.encryptor.decrypt(enc_model))
+    deployed = build_model(cfg, art.data.num_classes, art.data.in_channels, art.data.image_size)
     numpy_to_state(deployed, recovered)
-    acc_deployed = evaluate(deployed, data.test_set, cfg.device)
-    results["accuracy_deployed"] = acc_deployed
+    results["accuracy_deployed"] = evaluate(deployed, art.data.test_set, cfg.device)
 
-    if bundle is not None:
-        extracted = DualWatermarker(cfg).extract(deployed, bundle)
-        verdict = verify_ownership(bundle, extracted, model_hash, ledger, cfg)
+    if art.bundle is not None:
+        extracted = DualWatermarker(cfg).extract(deployed, art.bundle)
+        verdict = verify_ownership(art.bundle, extracted, model_hash, ledger, cfg)
         results["verification"] = verdict.to_dict()
         logger.info(
             "verification | NC(P)=%.3f NC(S)=%.3f BER(S)=%.3f hash=%s -> accept=%s",
@@ -125,10 +160,10 @@ def run_pipeline(cfg) -> dict:
             verdict.hash_match, verdict.accept,
         )
         results["watermark"] = {
-            "primary_layer": bundle.primary_layer,
-            "secondary_layer": bundle.secondary_layer,
-            "primary_bits": int(np.asarray(bundle.primary_bits).size),
-            "secondary_bits": int(np.asarray(bundle.secondary_bits).size),
+            "primary_layer": art.bundle.primary_layer,
+            "secondary_layer": art.bundle.secondary_layer,
+            "primary_bits": int(np.asarray(art.bundle.primary_bits).size),
+            "secondary_bits": int(np.asarray(art.bundle.secondary_bits).size),
             "commitment": commitment,
         }
 
