@@ -43,10 +43,17 @@ setup-liboqs: ## Install the liboqs-python PRIMARY KEM backend (needs liboqs; pr
 lock: ## Recompile requirements.txt from requirements.in (uv or pip-tools)
 	@if command -v uv >/dev/null 2>&1; then \
 		uv pip compile requirements.in -o requirements.txt ; \
-	else \
+		echo ">> requirements.txt regenerated (uv)." ; \
+	elif $(PY) -c "import piptools" >/dev/null 2>&1; then \
 		$(PY) -m piptools compile requirements.in -o requirements.txt ; \
+		echo ">> requirements.txt regenerated (pip-tools)." ; \
+	else \
+		echo ">> 'make lock' needs uv or pip-tools. Install one:" ; \
+		echo "     pip install uv        # then re-run make lock" ; \
+		echo "     pip install pip-tools # alternative" ; \
+		echo ">> (lock is optional — 'make setup' installs the committed requirements.txt.)" ; \
+		exit 1 ; \
 	fi
-	@echo ">> requirements.txt regenerated."
 
 test: ## Fast CPU-only smoke test + unit tests
 	$(PY) -m pytest -m "not slow and not gpu and not liboqs" -q
