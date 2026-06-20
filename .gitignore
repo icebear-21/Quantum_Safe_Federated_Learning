@@ -1,7 +1,9 @@
 # Datasets, checkpoints, results (regenerated; keep repo lean for the 100GB target box)
-data/
-results/
-checkpoints/
+# NOTE: anchored with a leading slash so these only match repo-root dirs and do
+# NOT accidentally ignore source packages like src/qsfl/data/.
+/data/
+/results/
+/checkpoints/
 *.pt
 *.ckpt
 *.npz
@@ -34,9 +36,9 @@ secrets/
 embedding_keys/
 
 # Blockchain (optional web3 backend) local state
-ledger_chain/
-artifacts/
-cache/
+/ledger_chain/
+/artifacts/
+/cache/
 node_modules/
 
 # Editor / OS
