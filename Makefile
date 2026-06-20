@@ -28,8 +28,12 @@ help:
 
 setup: ## CPU install from pinned lock (smoke-test ready)
 	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt
-	$(PIP) install -e .
+	# --ignore-installed: many base images (Jupyter/Debian) ship apt-managed
+	# packages (PyYAML, cryptography, ...) with no RECORD file, which pip cannot
+	# uninstall to upgrade. Installing into /usr/local shadows them and avoids
+	# the 'uninstall-no-record-file' error. Harmless if you run in a clean venv.
+	$(PIP) install --ignore-installed -r requirements.txt
+	$(PIP) install -e . --no-deps
 	@echo ">> CPU setup complete. Run 'make test' for the smoke test."
 
 setup-gpu: ## Install CUDA torch wheels for the H100 (cu124)
