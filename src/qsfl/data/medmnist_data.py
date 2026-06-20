@@ -13,6 +13,7 @@ Two heterogeneity modes (both produce ONE global model with a shared head):
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -63,6 +64,9 @@ def _load_medmnist(name: str, split: str, root: str, image_size: int, as_rgb: bo
         from torchvision import transforms
     except Exception as exc:  # pragma: no cover - import guard
         raise ImportError("medmnist and torchvision are required for the data layer.") from exc
+
+    # medmnist will not create a missing root dir (it raises instead); ensure it.
+    os.makedirs(root, exist_ok=True)
 
     info = INFO[name]
     DataClass = getattr(medmnist, info["python_class"])
