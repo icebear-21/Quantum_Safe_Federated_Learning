@@ -9,9 +9,19 @@ mode: federated
 device: auto
 
 data:
-  subsets: [pathmnist, octmnist, pneumoniamnist, bloodmnist]   # 4 hospitals
+  # Default: ONE dataset partitioned across hospitals via Dirichlet non-IID —
+  # the standard federated-learning benchmark (label/quantity skew, but a shared
+  # label space), which FedAvg can actually learn (~0.87 on pathmnist).
+  subsets: [pathmnist]
   partition: noniid
   dirichlet_alpha: 0.5
+  # ---------------------------------------------------------------------------
+  # OPTIONAL "modality-heterogeneous" stress demo: a different MedMNIST subset
+  # per hospital, unified into one label space. This is illustrative of extreme
+  # client heterogeneity but the label sets are DISJOINT, so vanilla FedAvg
+  # cannot converge (accuracy stays near 1/num_classes). Enable on the CLI:
+  #   data.subsets=[pathmnist,octmnist,pneumoniamnist,bloodmnist]
+  # ---------------------------------------------------------------------------
 
 federated:
   num_clients: 4
