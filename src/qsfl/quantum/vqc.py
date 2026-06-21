@@ -64,7 +64,18 @@ class VQCKeyGenerator:
                 "PennyLane is required for VQC key generation (pip install pennylane)."
             ) from exc
 
-        dev = qml.device(self.backend, wires=self.n_qubits, shots=self.shots)
+        try:
+            dev = qml.device(self.backend, wires=self.n_qubits, shots=self.shots)
+        except qml.DeviceError:
+            # e.g. lightning.gpu plugin not installed; fall back to the CPU
+            # statevector (negligible cost for the small qubit counts used here).
+            from qsfl.utils.logging import get_logger
+
+            get_logger("quantum").warning(
+                "quantum backend %r unavailable; falling back to default.qubit", self.backend
+            )
+            self.backend = "default.qubit"
+            dev = qml.device(self.backend, wires=self.n_qubits, shots=self.shots)
 
         @qml.qnode(dev)
         def circuit(theta):
